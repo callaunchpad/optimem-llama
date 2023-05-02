@@ -21,6 +21,7 @@ class LLaMA:
         max_gen_len: int,
         temperature: float = 0.8,
         top_p: float = 0.95,
+        on_cpu: bool = False,
     ) -> List[str]:
         bsz = len(prompts)
         params = self.model.params
@@ -34,8 +35,12 @@ class LLaMA:
 
         total_len = min(params.max_seq_len, max_gen_len + max_prompt_size)
 
-        tokens = torch.full(
-            (bsz, total_len), self.tokenizer.pad_id).cpu().long()
+        if on_cpu:
+            tokens = torch.full(
+                (bsz, total_len), self.tokenizer.pad_id).cpu().long()
+        else:
+            tokens = torch.full(
+                (bsz, total_len), self.tokenizer.pad_id).cuda().long()
         for k, t in enumerate(prompt_tokens):
             tokens[k, : len(t)] = torch.tensor(t).long()
         input_text_mask = tokens != self.tokenizer.pad_id
@@ -53,6 +58,10 @@ class LLaMA:
             else:
                 next_token = torch.argmax(logits, dim=-1)
             next_token = next_token.reshape(-1)
+            if on_cpu:
+                next_token.cpu()
+            else:
+                next_token.cuda()
             # only replace token if prompt has already been generated
             next_token = torch.where(
                 input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token
